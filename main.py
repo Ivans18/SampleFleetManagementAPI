@@ -5,6 +5,7 @@ import pymysql
 app = FastAPI()
 
 #vehicle class defined as model for automatic JSON import.
+#Requires refactoring or review
 class VehicleModel(BaseModel):
     vehicle_id: int = Field(ge=1)
     speed: int = Field(ge=0, le=160)
@@ -30,6 +31,7 @@ def db_connect():
     )
 
 #Check vehicle table exists and create if needed.
+#Requires refactoring
 @app.on_event("startup")
 def innit_db():
     try:
@@ -54,9 +56,10 @@ def innit_db():
 #Root page returns full fleet details.
 @app.get("/")
 def root():
-    return NULL
+    return 0
 
 #Retrieve details for a specific vehicle by vehicle id.
+#Requires refactoring
 @app.get("/vehicle/{vehicle_id}")
 def vehicle_search(vehicle_id: int):
     for v in fleet:
@@ -64,47 +67,44 @@ def vehicle_search(vehicle_id: int):
             return v
     raise HTTPException(status_code=404, detail="Vehicle not found")
 
-@app.post("/vehicle/new/")
+@app.post("/vehicle/new/", status_code=201)
 def add_vehicle(new_vehicle: VehicleModel):
-    
-    #Get vehicle table.
-    qstatement = "SELECT * FROM vehicle"
+    # SQL queries
+    # Parameterization for SQL injection protection
+    check_sql = "SELECT 1 FROM vehicle WHERE vehicle_id = %s"
+    insert_sql = """
+        INSERT INTO vehicle (vehicle_id, speed, engine_temp, fuel_level)
+        VALUES (%s, %s, %s, %s)
+    """
+
     try:
-        conn = db_connect()
-        with conn.cursor() as cursor:
-            cursor.execute(qstatement)
-            v_table = cursor.fetchall()
+        with db_connect() as conn:
+            with conn.cursor() as cursor:
 
-            #Check new vehicle id is not already in vehicle table.
-            #If new vehicle id is not unique: raise exception.
-            #If new vehicle id is unqiue: add new vehicle to DB.
-            for v in v_table:
-                if v["vehicle_id"] == new_vehicle.vehicle_id:
-                    raise HTTPException(status_code=400,detail="Vehicle already in DB")
+                # Check in DB for existing vehicle record. If exists then raise exception.
+                cursor.execute(check_sql, (new_vehicle.vehicle_id,))
+                if cursor.fetchone():
+                    raise HTTPException(status_code=400, detail="Vehicle already in DB")
 
-            qstatement = """
-                INSERT INTO vehicle(vehicle_id, speed, engine_temp, fuel_level) 
-                VALUES(%s,%s,%s,%s)
-                """
+                # If vehicle check passes, send insert query and commit DB addition.
+                cursor.execute(insert_sql, (
+                    new_vehicle.vehicle_id,
+                    new_vehicle.speed,
+                    new_vehicle.engine_temp,
+                    new_vehicle.fuel_level
+                ))
+                conn.commit()
+        return {"message": f"Vehicle {new_vehicle.vehicle_id} was added successfully."}
+    
+    # reraise HTTP exception if triggered.
+    except HTTPException:
+        raise
 
-            vehicle_tuple = (
-                new_vehicle.vehicle_id,
-                new_vehicle.speed,
-                new_vehicle.engine_temp,
-                new_vehicle.fuel_level
-            )
-
-            cursor.execute(qstatement, vehicle_tuple)
-            print (f"Vehicle Added: {new_vehicle}")
-
-            #Commit DB changes. 
-            conn.commit()
-    except HTTPException: raise
-    except Exception: 
+    # Exception catch-all
+    except Exception as e:
         raise HTTPException(status_code=500, detail="Could not connect or write to DB")
-    #Close DB connection. 
-    finally: 
-        conn.close()
+
+    
     
 
 
