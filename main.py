@@ -52,12 +52,12 @@ def innit_db():
     #Exception catch-all
     except Exception as e: raise HTTPException(status_code=500, detail="Startup Error")
 
-
 #API Health check on root endpoint
 @app.get("/", status_code=200)
 def root():
     return {"Status":"Healthy", "Message":"Vehicle API is running"}
 
+#Returns entire fleet in DB for quick browsing
 @app.get("/vehicle", status_code=200)
 def vehicle_browse():
     query = "SELECT * FROM vehicle ORDER BY vehicle_id ASC"
@@ -117,3 +117,20 @@ def add_vehicle(new_vehicle: VehicleModel):
     except HTTPException: raise
     #Exception catch-all
     except Exception as e: raise HTTPException(status_code=500, detail="DB Error")
+
+#Remove vehicle from fleet if it exists
+@app.delete("/vehicle/{vehicle_id}", status_code=200)
+def remove_vehicle(vehicle_id: int):
+    delete_sql = "DELETE FROM vehicle WHERE vehicle_id = %s"
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(delete_sql, (vehicle_id,))
+                #check if any rows were affected to confirm if deletion took
+                if cursor.rowcount == 0:
+                    raise HTTPException(status_code=404, detail="Vehicle not found.")
+                conn.commit()
+        return {"message":"Vehicle Deleted", "Vehicle ID":vehicle_id}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail="DB Error")
+
