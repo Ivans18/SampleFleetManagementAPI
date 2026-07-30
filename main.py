@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import pymysql
 
-app = FastAPI()
+app = FastAPI(title="Fleet Management API")
 
 #vehicle class defined as model for automatic JSON import.
 #Requires refactoring or review
@@ -55,11 +55,11 @@ def innit_db():
 #API Health check on root endpoint
 @app.get("/", status_code=200)
 def root():
-    return {"Status":"Healthy", "Message":"Vehicle API is running"}
+    return {"Status":"Healthy", "Message":"Vehicle API is running | Check /docs for testing and /redoc for read-only documentation"}
 
 #Returns entire fleet in DB for quick browsing
 @app.get("/vehicle", status_code=200)
-def vehicle_browse():
+def browse_vehicles():
     query = "SELECT * FROM vehicle ORDER BY vehicle_id ASC"
     try:
         with db_connect() as conn:
