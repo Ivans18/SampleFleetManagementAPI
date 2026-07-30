@@ -8,55 +8,66 @@ app = FastAPI()
 #Requires refactoring or review
 class VehicleModel(BaseModel):
     vehicle_id: int = Field(ge=1)
-    speed: int = Field(ge=0, le=160)
-    engine_temp: int = Field(ge=0, le=150)
-    fuel_level: int = Field(ge=0, le=100)
+    speed: float = Field(ge=0, le=160)
+    latitude: float
+    longitude: float
 
-#AWS RDS DB CREDS.
+#DB Creds
 DB_HOST = "testfleet.cr284oi8q9mz.ap-southeast-2.rds.amazonaws.com"
 DB_USER = "admin"
 DB_PASSWORD = "PCBuild202"
 DB_NAME = "fleet_db"
 DB_PORT = 3306
 
-#connect to AWS RDS DB.
+#connect to DB.
 def db_connect():
-    return pymysql.connect(
-        host=DB_HOST,
-        user=DB_USER,
-        database=DB_NAME,
-        password=DB_PASSWORD,
-        port=DB_PORT,
-        cursorclass=pymysql.cursors.DictCursor
-    )
+    try:
+        return pymysql.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            database=DB_NAME,
+            password=DB_PASSWORD,
+            port=DB_PORT,
+            cursorclass=pymysql.cursors.DictCursor
+        )
+    except Exception as e: raise HTTPException(status_code=500, detail="Failed to connect to DB")
 
 #Check vehicle table exists and create if needed.
-#Requires refactoring
 @app.on_event("startup")
 def innit_db():
     try:
-        conn = db_connect()
-        with conn.cursor() as cursor:
-            statement = """ 
-            CREATE TABLE IF NOT EXISTS vehicle 
-                (vehicle_id INT PRIMARY KEY,
-                speed INT,
-                engine_temp INT,
-                fuel_level INT);
-             """
-            cursor.execute(statement)
-        conn.commit()
-        print("Table Ready: vehicle")
-    except:
-        raise HTTPException(status_code=500, detail="Table: vehicle - init failed.")
-    finally:
-        conn.close()
+        with db_connect() as conn:
+            with conn.cursor() as cursor:
+                query = """ 
+                CREATE TABLE IF NOT EXISTS vehicle 
+                    (vehicle_id INT PRIMARY KEY,
+                    speed float,
+                    latitude float,
+                    longitude float);
+                """
+                cursor.execute(query)
+            conn.commit()
+            print("Table Ready: vehicle")
+    except HTTPException: raise HTTPException(status_code=500, detail="Table: vehicle - init failed.")
+    #Exception catch-all
+    except Exception as e: raise HTTPException(status_code=500, detail="Startup Error")
 
 
 #API Health check on root endpoint
 @app.get("/", status_code=200)
 def root():
     return {"Status":"Healthy", "Message":"Vehicle API is running"}
+
+@app.get("/vehicle", status_code=200)
+def vehicle_browse():
+    query = "SELECT * FROM vehicle ORDER BY vehicle_id ASC"
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cursor:
+                    cursor.execute(query)
+                    return cursor.fetchall()
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail="Could not retrieve database records.")
 
 #Retrieve details for a specific vehicle by vehicle id.
 @app.get("/vehicle/{vehicle_id}", status_code=200)
@@ -74,21 +85,18 @@ def vehicle_search(vehicle_id: int):
                     raise HTTPException(status_code=404, detail="Vehicle not found.")
                 return vehicle
     #Reraise HTTPException if triggered.
-    except HTTPException:
-        raise
+    except HTTPException: raise
     #Exception catch-all
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Could not connect or write to DB")
+    except Exception as e: raise HTTPException(status_code=500, detail="DB Error")
 
 @app.post("/vehicle/new/", status_code=201)
 def add_vehicle(new_vehicle: VehicleModel):
     #SQL queries
     check_sql = "SELECT 1 FROM vehicle WHERE vehicle_id = %s"
     insert_sql = """
-        INSERT INTO vehicle (vehicle_id, speed, engine_temp, fuel_level)
+        INSERT INTO vehicle (vehicle_id, speed, latitude, longitude)
         VALUES (%s, %s, %s, %s)
     """
-
     try:
         with db_connect() as conn:
             with conn.cursor() as cursor:
@@ -100,21 +108,12 @@ def add_vehicle(new_vehicle: VehicleModel):
                 cursor.execute(insert_sql, (
                     new_vehicle.vehicle_id,
                     new_vehicle.speed,
-                    new_vehicle.engine_temp,
-                    new_vehicle.fuel_level
+                    new_vehicle.latitude,
+                    new_vehicle.longitude
                 ))
                 conn.commit()
         return {"message": f"Vehicle {new_vehicle.vehicle_id} was added successfully."}
     #Reraise HTTP exception if triggered.
-    except HTTPException:
-        raise
+    except HTTPException: raise
     #Exception catch-all
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Could not connect or write to DB")
-
-    
-    
-
-
-
-    
+    except Exception as e: raise HTTPException(status_code=500, detail="DB Error")
