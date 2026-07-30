@@ -53,24 +53,36 @@ def innit_db():
         conn.close()
 
 
-#Root page returns full fleet details.
-@app.get("/")
+#API Health check on root endpoint
+@app.get("/", status_code=200)
 def root():
-    return 0
+    return {"Status":"Healthy", "Message":"Vehicle API is running"}
 
 #Retrieve details for a specific vehicle by vehicle id.
-#Requires refactoring
-@app.get("/vehicle/{vehicle_id}")
+@app.get("/vehicle/{vehicle_id}", status_code=200)
 def vehicle_search(vehicle_id: int):
-    for v in fleet:
-        if v["vehicle_id"] == vehicle_id:
-            return v
-    raise HTTPException(status_code=404, detail="Vehicle not found")
+    #SQL Query
+    check_sql = "SELECT * FROM vehicle WHERE vehicle_id = %s"
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cursor:
+                #Fetch record if it exists
+                cursor.execute(check_sql, (vehicle_id,))
+                vehicle = cursor.fetchone()
+                #If record does not exist, return 404 error, else return record.
+                if not vehicle:
+                    raise HTTPException(status_code=404, detail="Vehicle not found.")
+                return vehicle
+    #Reraise HTTPException if triggered.
+    except HTTPException:
+        raise
+    #Exception catch-all
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Could not connect or write to DB")
 
 @app.post("/vehicle/new/", status_code=201)
 def add_vehicle(new_vehicle: VehicleModel):
-    # SQL queries
-    # Parameterization for SQL injection protection
+    #SQL queries
     check_sql = "SELECT 1 FROM vehicle WHERE vehicle_id = %s"
     insert_sql = """
         INSERT INTO vehicle (vehicle_id, speed, engine_temp, fuel_level)
@@ -80,13 +92,11 @@ def add_vehicle(new_vehicle: VehicleModel):
     try:
         with db_connect() as conn:
             with conn.cursor() as cursor:
-
-                # Check in DB for existing vehicle record. If exists then raise exception.
+                #Check in DB for existing vehicle record. If exists then raise exception.
                 cursor.execute(check_sql, (new_vehicle.vehicle_id,))
                 if cursor.fetchone():
                     raise HTTPException(status_code=400, detail="Vehicle already in DB")
-
-                # If vehicle check passes, send insert query and commit DB addition.
+                #If vehicle check passes, send insert query and commit DB addition.
                 cursor.execute(insert_sql, (
                     new_vehicle.vehicle_id,
                     new_vehicle.speed,
@@ -95,12 +105,10 @@ def add_vehicle(new_vehicle: VehicleModel):
                 ))
                 conn.commit()
         return {"message": f"Vehicle {new_vehicle.vehicle_id} was added successfully."}
-    
-    # reraise HTTP exception if triggered.
+    #Reraise HTTP exception if triggered.
     except HTTPException:
         raise
-
-    # Exception catch-all
+    #Exception catch-all
     except Exception as e:
         raise HTTPException(status_code=500, detail="Could not connect or write to DB")
 
