@@ -134,3 +134,24 @@ def remove_vehicle(vehicle_id: int):
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail="DB Error")
 
+#Modify vehicle if it exists
+@app.put("/vehicle/update/", status_code=200)
+def update_vehicle(vehicle: VehicleModel):
+    query = """ 
+        UPDATE vehicle
+        SET speed = %s, latitude = %s, longitude = %s
+        WHERE vehicle_id = %s
+     """
+    try:
+        with db_connect() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(query, (vehicle.speed, vehicle.latitude, vehicle.longitude, vehicle.vehicle_id))
+                #check if query affected DB
+                if cursor.rowcount == 0:
+                    raise HTTPException(status_code=404, detail="Could not update record. Check payload format or if vehicle exists.")
+                conn.commit()
+        return {"message":f"Vehicle with ID {vehicle.vehicle_id} updated successfully"}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail="DB Error")
+
+    
