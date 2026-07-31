@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import pymysql
+import time
 
 app = FastAPI(title="Fleet Management API")
 
@@ -154,4 +155,20 @@ def update_vehicle(vehicle: VehicleModel):
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail="DB Error")
 
+@app.get("/stress/", status_code=200)
+def api_stress_test(iterations: int = 10_000_000):
+    start_time = time.time()
+
+    #Simple calculation to create CPU load
+    total = 0
+    for i in range(0,iterations):
+        total += i*i
     
+    #Get total run-time as clean round number
+    execution_time = round((time.time() - start_time), 4)
+
+    return {
+        "status":"completed",
+        "iterations":iterations,
+        "execution_time_seconds":execution_time
+    }
