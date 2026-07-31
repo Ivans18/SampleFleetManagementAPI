@@ -1,9 +1,13 @@
+import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import pymysql
 import time
+from dotenv import load_dotenv
 
 app = FastAPI(title="Fleet Management API")
+
+load_dotenv("db.env")
 
 #vehicle class defined as model for automatic JSON import.
 #Requires refactoring or review
@@ -13,12 +17,12 @@ class VehicleModel(BaseModel):
     latitude: float
     longitude: float
 
-#DB Creds
-DB_HOST = "testfleet.cr284oi8q9mz.ap-southeast-2.rds.amazonaws.com"
-DB_USER = "admin"
-DB_PASSWORD = "PCBuild202"
-DB_NAME = "fleet_db"
-DB_PORT = 3306
+# Read variables safely from the environment
+DB_HOST = os.getenv("DB_HOST")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_NAME = os.getenv("DB_NAME")
+DB_PORT = int(os.getenv("DB_PORT", 3306))
 
 #connect to DB.
 def db_connect():
