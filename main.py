@@ -1,23 +1,13 @@
 import os
+from contexlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import pymysql
 import time
 from dotenv import load_dotenv
 
-app = FastAPI(title="Fleet Management API")
-
-load_dotenv("db.env")
-
-#vehicle class defined as model for automatic JSON import.
-#Requires refactoring or review
-class VehicleModel(BaseModel):
-    vehicle_id: int = Field(ge=1)
-    speed: float = Field(ge=0, le=160)
-    latitude: float
-    longitude: float
-
 # Read variables safely from the environment
+load_dotenv("db.env")
 DB_HOST = os.getenv("DB_HOST")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
@@ -38,8 +28,8 @@ def db_connect():
     except Exception as e: raise HTTPException(status_code=500, detail="Failed to connect to DB")
 
 #Check vehicle table exists and create if needed.
-@app.on_event("startup")
-def innit_db():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     try:
         with db_connect() as conn:
             with conn.cursor() as cursor:
@@ -53,9 +43,20 @@ def innit_db():
                 cursor.execute(query)
             conn.commit()
             print("Table Ready: vehicle")
-    except HTTPException: raise HTTPException(status_code=500, detail="Table: vehicle - init failed.")
-    #Exception catch-all
-    except Exception as e: raise HTTPException(status_code=500, detail="Startup Error")
+    except Exception as e:
+        print(f"Database initialization failed: {e}")
+        raise
+    yield
+
+app = FastAPI(title="Fleet Management API", lifespan=lifespan)
+
+#vehicle class defined as model for automatic JSON import.
+#Requires refactoring or review
+class VehicleModel(BaseModel):
+    vehicle_id: int = Field(ge=1)
+    speed: float = Field(ge=0, le=160)
+    latitude: float
+    longitude: float
 
 #API Health check on root endpoint
 @app.get("/", status_code=200)
